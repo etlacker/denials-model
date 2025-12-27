@@ -22,10 +22,13 @@ Synthetic claims/denial dataset augmented to ~30% denials, cleaned/enriched for 
    - LightGBM baseline: `uv run python stage1b_model.py`
      - Saves model `artifacts/claim_denial_model_lgbm.joblib`
      - Metrics `artifacts/claim_denial_metrics_lgbm.json`
+   - CatBoost (categorical handling): `uv run python stage1c_model.py`
+     - Saves model `artifacts/claim_denial_model_catboost.cbm`
+     - Metrics `artifacts/claim_denial_metrics_catboost.json`
 
 ## Current model stats (eval set, 30% positives)
 
-XGBoost (stage1a, best config from sweep; uncalibrated chosen)
+ XGBoost (stage1a, best config from sweep; uncalibrated chosen)
 
 - AP: 0.665
 - F1 @ 0.5: 0.571
@@ -38,6 +41,14 @@ LightGBM (stage1b baseline)
 - CV AP: ~0.63 (3-fold)
 - Eval metrics are in `claim_denial_metrics_lgbm.json` (baseline trails XGBoost).
 - Confusion/more details: see metrics JSON.
+
+ CatBoost (stage1c, categorical model)
+ 
+ - Eval AP: 0.701
+ - F1 @ 0.5: 0.502
+ - Best F1: 0.600 @ threshold ≈ 0.321
+ - Confusion @ best F1: tp 2,577 / fp 1,793 / fn 1,639 / tn 5,886
+ - Best-cost threshold (FN cost=5, FP=1): ~0.20 (higher recall, more FP)
 
 Improvement ideas (with rough expected lift)
 
