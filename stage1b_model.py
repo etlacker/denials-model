@@ -5,9 +5,13 @@ Uses the same feature engineering as stage1a (log billed_amount, count buckets).
 
 from pathlib import Path
 import json
+import warnings
 import numpy as np
 import pandas as pd
 import joblib
+
+# Suppress sklearn feature name warnings (harmless, caused by pipeline transformations)
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import GroupKFold, StratifiedKFold, cross_val_predict
@@ -28,10 +32,13 @@ except ImportError as exc:  # pragma: no cover
 
 
 ARTIFACTS_DIR = Path("artifacts")
-TRAIN_PATH = ARTIFACTS_DIR / "claims_enriched_train.csv"
-EVAL_PATH = ARTIFACTS_DIR / "eval" / "claims_enriched_eval.csv"
-MODEL_PATH = ARTIFACTS_DIR / "claim_denial_model_lgbm.joblib"
-METRICS_PATH = ARTIFACTS_DIR / "claim_denial_metrics_lgbm.json"
+DATA_DIR = ARTIFACTS_DIR / "data_cleaning"
+STAGE_DIR = ARTIFACTS_DIR / "stage1b"
+STAGE_DIR.mkdir(parents=True, exist_ok=True)
+TRAIN_PATH = DATA_DIR / "claims_enriched_train.csv"
+EVAL_PATH = DATA_DIR / "claims_enriched_eval.csv"
+MODEL_PATH = STAGE_DIR / "claim_denial_model.joblib"
+METRICS_PATH = STAGE_DIR / "claim_denial_metrics.json"
 
 label_col = "label_denied"
 group_col = "patient_id"

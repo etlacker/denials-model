@@ -79,3 +79,4 @@ cython_debug/
 data/
 artifacts/
 raw_data/
+catboost_info/

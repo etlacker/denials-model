@@ -6,9 +6,13 @@ Denial prediction model trained on the cleaned/enriched dataset (augmented input
 """
 from pathlib import Path
 import json
+import warnings
 import joblib
 import numpy as np
 import pandas as pd
+
+# Suppress sklearn feature name warnings (harmless, caused by pipeline transformations)
+warnings.filterwarnings("ignore", message="X does not have valid feature names")
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
@@ -30,10 +34,13 @@ except ImportError as exc:  # pragma: no cover
 
 
 ARTIFACTS_DIR = Path("artifacts")
-TRAIN_PATH = ARTIFACTS_DIR / "claims_enriched_train.csv"
-EVAL_PATH = ARTIFACTS_DIR / "eval" / "claims_enriched_eval.csv"
-MODEL_PATH = ARTIFACTS_DIR / "claim_denial_model.joblib"
-METRICS_PATH = ARTIFACTS_DIR / "claim_denial_metrics.json"
+DATA_DIR = ARTIFACTS_DIR / "data_cleaning"
+STAGE_DIR = ARTIFACTS_DIR / "stage1a"
+STAGE_DIR.mkdir(parents=True, exist_ok=True)
+TRAIN_PATH = DATA_DIR / "claims_enriched_train.csv"
+EVAL_PATH = DATA_DIR / "claims_enriched_eval.csv"
+MODEL_PATH = STAGE_DIR / "claim_denial_model.joblib"
+METRICS_PATH = STAGE_DIR / "claim_denial_metrics.json"
 
 label_col = "label_denied"
 group_col = "patient_id"

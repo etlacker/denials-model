@@ -14,20 +14,20 @@ import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 
 RAW_DATA_DIR = Path("raw_data")
-AUGMENTED_DIR = Path("artifacts")
 ARTIFACTS_DIR = Path("artifacts")
-ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+AUGMENT_DIR = ARTIFACTS_DIR / "augment_denials"
+STAGE_DIR = ARTIFACTS_DIR / "data_cleaning"
+STAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 RAW_CLAIMS_PATH = RAW_DATA_DIR / "claims_and_billing.csv"
 RAW_DENIALS_PATH = RAW_DATA_DIR / "denials.csv"
-AUG_CLAIMS_PATH = AUGMENTED_DIR / "claims_and_billing_augmented.csv"
-AUG_DENIALS_PATH = AUGMENTED_DIR / "denials_augmented.csv"
+AUG_CLAIMS_PATH = AUGMENT_DIR / "claims_and_billing_augmented.csv"
+AUG_DENIALS_PATH = AUGMENT_DIR / "denials_augmented.csv"
 
-CLEAN_CLAIMS_PATH = ARTIFACTS_DIR / "claims_and_billing_cleaned.csv"
-OUTPUT_JOINED_PATH = ARTIFACTS_DIR / "claims_enriched.csv"
-TRAIN_PATH = ARTIFACTS_DIR / "claims_enriched_train.csv"
-EVAL_PATH = ARTIFACTS_DIR / "eval" / "claims_enriched_eval.csv"
-EVAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+CLEAN_CLAIMS_PATH = STAGE_DIR / "claims_and_billing_cleaned.csv"
+OUTPUT_JOINED_PATH = STAGE_DIR / "claims_enriched.csv"
+TRAIN_PATH = STAGE_DIR / "claims_enriched_train.csv"
+EVAL_PATH = STAGE_DIR / "claims_enriched_eval.csv"
 
 
 def normalize_text(series: pd.Series) -> pd.Series:

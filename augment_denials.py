@@ -28,14 +28,15 @@ import pandas as pd
 
 DATA_DIR = Path("raw_data")
 ARTIFACTS_DIR = Path("artifacts")
-ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+STAGE_DIR = ARTIFACTS_DIR / "augment_denials"
+STAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 CLAIMS_PATH = DATA_DIR / "claims_and_billing.csv"
 DENIALS_PATH = DATA_DIR / "denials.csv"
 
-OUTPUT_CLAIMS = ARTIFACTS_DIR / "claims_and_billing_augmented.csv"
-OUTPUT_DENIALS = ARTIFACTS_DIR / "denials_augmented.csv"
-SUMMARY_PATH = ARTIFACTS_DIR / "denial_augmentation_summary.json"
+OUTPUT_CLAIMS = STAGE_DIR / "claims_and_billing_augmented.csv"
+OUTPUT_DENIALS = STAGE_DIR / "denials_augmented.csv"
+SUMMARY_PATH = STAGE_DIR / "denial_augmentation_summary.json"
 
 RNG = np.random.default_rng(42)
 TIMELY_THRESHOLD_DAYS = 180  # configurable
@@ -225,38 +226,41 @@ def selector_medical_necessity(df: pd.DataFrame, target: int, selected: Set[str]
 
 
 def selector_missing_info(df: pd.DataFrame, target: int, selected: Set[str]) -> pd.DataFrame:
-    def is_missing_list(val) -> bool:
-        if val is None:
-            return True
-        if isinstance(val, float) and pd.isna(val):
-            return True
-        if isinstance(val, (list, tuple)) and len(val) == 0:
-            return True
-        return False
-
-    def missing_fields(row) -> List[str]:
-        fields = []
-        if pd.isna(row.get("phone")) or str(row.get("phone")).strip() == "":
-            fields.append("phone")
-        if pd.isna(row.get("email")) or str(row.get("email")).strip() == "":
-            fields.append("email")
-        if pd.isna(row.get("address")) or str(row.get("address")).strip() == "":
-            fields.append("address")
-        if is_missing_list(row.get("diag_codes")):
-            fields.append("diagnosis")
-        if is_missing_list(row.get("proc_codes")):
-            fields.append("procedure")
-        return fields
-
+    """Select claims with missing information using vectorized operations."""
     df = df.copy()
-    df["missing_fields"] = df.apply(missing_fields, axis=1)
+    
+    # Vectorized missing field detection
+    missing_phone = df["phone"].isna() | (df["phone"].astype(str).str.strip() == "")
+    missing_email = df["email"].isna() | (df["email"].astype(str).str.strip() == "")
+    missing_address = df["address"].isna() | (df["address"].astype(str).str.strip() == "")
+    missing_diag = df["diag_codes"].isna() | (df["diag_codes"].apply(lambda x: isinstance(x, list) and len(x) == 0))
+    missing_proc = df["proc_codes"].isna() | (df["proc_codes"].apply(lambda x: isinstance(x, list) and len(x) == 0))
+    
+    has_missing = missing_phone | missing_email | missing_address | missing_diag | missing_proc
+    
     mask = (
         (df["claim_status"] != "Denied")
         & df["claim_id"].notna()
-        & (df["missing_fields"].str.len() > 0)
+        & has_missing
     )
-    cand = df.loc[mask, ["claim_id", "missing_fields"]].copy()
-    cand["evidence"] = cand["missing_fields"].apply(lambda f: {"missing": f})
+    cand = df.loc[mask, ["claim_id"]].copy()
+    
+    # Build evidence only for candidates
+    def build_evidence(idx):
+        fields = []
+        if missing_phone.loc[idx]:
+            fields.append("phone")
+        if missing_email.loc[idx]:
+            fields.append("email")
+        if missing_address.loc[idx]:
+            fields.append("address")
+        if missing_diag.loc[idx]:
+            fields.append("diagnosis")
+        if missing_proc.loc[idx]:
+            fields.append("procedure")
+        return {"missing": fields}
+    
+    cand["evidence"] = [build_evidence(idx) for idx in cand.index]
     return pick_top(cand, target, selected)
 
 
@@ -564,7 +568,10 @@ def main():
 
     if remaining_needed > 0:
         print(f"[warn] still short by {remaining_needed}, distributing evenly across categories with remaining candidates.")
-        while remaining_needed > 0:
+        max_iterations = 100  # Prevent infinite loops
+        iteration = 0
+        while remaining_needed > 0 and iteration < max_iterations:
+            iteration += 1
             progress = False
             for cat in categories:
                 if remaining_needed <= 0:
@@ -578,6 +585,7 @@ def main():
                 remaining_needed -= len(extra)
                 progress = True
             if not progress:
+                print(f"[warn] no more candidates available after {iteration} iterations")
                 break
 
     if remaining_needed > 0:
