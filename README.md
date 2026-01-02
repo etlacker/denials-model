@@ -2,7 +2,7 @@
 
 ## Overview
 
-Synthetic claims/denial dataset augmented to ~30% denials, cleaned/enriched for ML, with multiple denial-prediction models evaluated. **CatBoost (stage1c) achieves best performance** with 0.701 AP and 0.600 F1. LLM reasoning augmentation (stage1d) did not improve results.
+Synthetic claims/denial dataset augmented to ~35% denials, cleaned/enriched for ML, with multiple denial-prediction models evaluated. **CatBoost (stage1c) achieves best performance** with 0.701 AP and 0.600 F1. LLM reasoning augmentation (stage1d) did not improve results.
 
 ## Artifacts Directory Structure
 
@@ -41,37 +41,69 @@ artifacts/
    - Reasoning-augmented: `uv run python stage1d_reasoning_model.py` → `artifacts/stage1d/`
      - Requires `GEMINI_API_KEY` in `.env` file
 
-## Current Model Stats (eval set, 30% positives)
+## Current Model Stats (eval set, 35% denials)
 
 | Model                   | AP        | Best F1   | Threshold | Notes               |
 | ----------------------- | --------- | --------- | --------- | ------------------- |
 | CatBoost (stage1c)      | **0.701** | **0.600** | 0.321     | **Best model**      |
 | Reasoning-Aug (stage1d) | 0.694     | 0.595     | 0.259     | LLM embeddings hurt |
 | XGBoost (stage1a)       | 0.665     | 0.581     | 0.400     |                     |
-| LightGBM (stage1b)      | ~0.63     | -         | -         | CV only             |
+| LightGBM (stage1b)      | 0.649     | 0.567     | 0.281     |                     |
 
-### XGBoost (stage1a)
+## Plain English Performance Summary
 
-- AP: 0.665
-- Best F1: 0.581 @ threshold ≈ 0.400
+The evaluation set contains **11,895 claims** total:
 
-### LightGBM (stage1b)
-
-- CV AP: ~0.63 (3-fold)
-- Baseline, trails XGBoost
+- **4,203 actual denials** (35.3%)
+- **7,692 valid claims** (64.7%)
 
 ### CatBoost (stage1c) - Best Model
 
-- Eval AP: 0.701
-- Best F1: 0.600 @ threshold ≈ 0.321
+At the **optimal threshold (0.275)**:
+
+- **Caught 2,901 of 4,203 denials** (69% recall) — the model correctly identified about 7 in 10 claims that would be denied
+- **Missed 1,302 denials** — these claims were predicted valid but actually got denied
+- **Flagged 2,689 valid claims as denials** (35% false positive rate) — about 1 in 3 valid claims was incorrectly flagged
+- **When the model predicts "denial," it's right 52% of the time** (precision)
+
+At a **high-confidence threshold (0.5)**:
+
+- **Caught 1,438 of 4,203 denials** (34% recall) — only catches the most obvious denials
+- **Missed 2,765 denials** — most denials slip through
+- **Flagged only 303 valid claims as denials** (4% false positive rate) — very few false alarms
+- **When the model predicts "denial," it's right 83% of the time** (precision)
+
+**Trade-off**: Lower thresholds catch more denials but create more false alarms. Higher thresholds are more precise but miss more denials.
+
+### XGBoost (stage1a)
+
+At the **optimal threshold (0.419)**:
+
+- **Caught 2,913 of 4,203 denials** (69% recall)
+- **Flagged 3,008 valid claims as denials** (39% false positive rate)
+- **When predicting "denial," right 49% of the time** (precision)
+
+### LightGBM (stage1b)
+
+At the **optimal threshold (0.281)**:
+
+- **Caught 2,967 of 4,203 denials** (71% recall)
+- **Flagged 3,290 valid claims as denials** (43% false positive rate)
+- **When predicting "denial," right 47% of the time** (precision)
 
 ### Reasoning-Augmented CatBoost (stage1d)
 
 - Uses Gemini 3.0 Flash to generate denial risk reasoning per claim
 - Embeddings via sentence-transformers (all-MiniLM-L6-v2, 384 dims)
 - Parallelized API calls (~28 claims/sec with 50 workers)
-- **Eval AP: 0.694** | **Best F1: 0.595** @ threshold ≈ 0.259
-- **Result: Slightly underperforms baseline CatBoost (-0.7% AP, -0.5% F1)**
+
+At the **optimal threshold (0.259)**:
+
+- **Caught 3,098 of 4,203 denials** (74% recall)
+- **Flagged 3,116 valid claims as denials** (41% false positive rate)
+- **When predicting "denial," right 50% of the time** (precision)
+
+**Result: Slightly underperforms baseline CatBoost (-0.7% AP, -0.5% F1)** despite higher recall, the extra false positives hurt overall balance.
 
 #### Why didn't LLM reasoning help?
 
@@ -81,6 +113,15 @@ artifacts/
 4. **Embedding mismatch** - General-purpose encoder may not capture medical reasoning well
 
 **Conclusion:** Simpler is better here. CatBoost (stage1c) remains the best model.
+
+## Glossary
+
+- **AP (Average Precision)**: Overall ranking quality, 0-1 scale. Higher = model ranks denials above valid claims more consistently.
+- **F1 Score**: Balance between precision and recall, 0-1 scale. Higher = better trade-off between catching denials and avoiding false alarms.
+- **Recall**: % of actual denials the model catches
+- **Precision**: When model predicts "denial," how often it's correct
+- **False Positive Rate**: % of valid claims incorrectly flagged as denials
+- **Threshold**: Confidence cutoff — predictions above this are labeled "denial"
 
 ## Usage
 
