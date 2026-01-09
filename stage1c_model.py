@@ -1,7 +1,12 @@
 """
 CatBoost model for denial prediction with categorical handling and engineered features.
-"""
 
+Usage:
+  python stage1c_model.py                           # Uses augmented data if available
+  python stage1c_model.py --data-dir artifacts/data_cleaning_raw  # Uses raw data
+  python stage1c_model.py --both                    # Runs on both datasets
+"""
+import argparse
 from pathlib import Path
 import json
 import numpy as np
@@ -20,13 +25,6 @@ from sklearn.impute import SimpleImputer
 from catboost import CatBoostClassifier, Pool
 
 ARTIFACTS_DIR = Path("artifacts")
-DATA_DIR = ARTIFACTS_DIR / "data_cleaning"
-STAGE_DIR = ARTIFACTS_DIR / "stage1c"
-STAGE_DIR.mkdir(parents=True, exist_ok=True)
-TRAIN_PATH = DATA_DIR / "claims_enriched_train.csv"
-EVAL_PATH = DATA_DIR / "claims_enriched_eval.csv"
-MODEL_PATH = STAGE_DIR / "claim_denial_model.cbm"
-METRICS_PATH = STAGE_DIR / "claim_denial_metrics.json"
 
 label_col = "label_denied"
 group_col = "patient_id"
@@ -127,9 +125,17 @@ def prepare_data(train_df, eval_df):
     return X_train, X_eval, y_train, y_eval, cat_cols
 
 
-def main():
-    train_df = pd.read_csv(TRAIN_PATH)
-    eval_df = pd.read_csv(EVAL_PATH)
+def run_training(data_dir: Path, output_dir: Path):
+    """Run the full training pipeline for a given data directory."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    train_path = data_dir / "claims_enriched_train.csv"
+    eval_path = data_dir / "claims_enriched_eval.csv"
+    model_path = output_dir / "claim_denial_model.cbm"
+    metrics_path = output_dir / "claim_denial_metrics.json"
+    
+    print(f"[info] Loading data from {data_dir}")
+    train_df = pd.read_csv(train_path)
+    eval_df = pd.read_csv(eval_path)
     X_train, X_eval, y_train, y_eval, cat_cols = prepare_data(train_df, eval_df)
 
     # CV strategy
@@ -185,7 +191,7 @@ def main():
     eval_conf_default = confusion_stats(y_eval, proba, threshold=0.5)
     eval_conf_best = confusion_stats(y_eval, proba, threshold=best_threshold)
 
-    model.save_model(MODEL_PATH)
+    model.save_model(model_path)
     metrics_payload = {
         "cv_metrics": cv_metrics,
         "cv_confusion_0_5": cv_conf_default,
@@ -201,9 +207,70 @@ def main():
             "best_cost": best_cost_row["threshold"],
         },
     }
-    METRICS_PATH.write_text(json.dumps(metrics_payload, indent=2))
-    print(f"[done] saved CatBoost model to {MODEL_PATH}")
-    print(f"[done] wrote metrics to {METRICS_PATH}")
+    metrics_path.write_text(json.dumps(metrics_payload, indent=2))
+    print(f"[done] saved CatBoost model to {model_path}")
+    print(f"[done] wrote metrics to {metrics_path}")
+    
+    return metrics_payload
+
+
+def get_default_data_dir() -> Path:
+    """Get the default data directory (augmented if available, else raw)."""
+    aug_dir = ARTIFACTS_DIR / "data_cleaning_augmented"
+    raw_dir = ARTIFACTS_DIR / "data_cleaning_raw"
+    if (aug_dir / "claims_enriched_train.csv").exists():
+        return aug_dir
+    return raw_dir
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Train CatBoost denial prediction model.")
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        help="Directory containing train/eval CSVs (default: auto-detect augmented or raw)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Directory to save model and metrics (default: based on data-dir)",
+    )
+    parser.add_argument(
+        "--both",
+        action="store_true",
+        help="Run training on both augmented and raw datasets.",
+    )
+    args = parser.parse_args()
+
+    if args.both:
+        results = {}
+        for suffix in ["raw", "augmented", "balanced"]:
+            data_dir = ARTIFACTS_DIR / f"data_cleaning_{suffix}"
+            if not (data_dir / "claims_enriched_train.csv").exists():
+                print(f"[warn] Skipping {suffix}: {data_dir} not found")
+                continue
+            output_dir = ARTIFACTS_DIR / f"stage1c_{suffix}"
+            print("\n" + "=" * 60)
+            print(f"Training on {suffix.upper()} data")
+            print("=" * 60)
+            metrics = run_training(data_dir, output_dir)
+            results[suffix] = metrics
+        return results
+    else:
+        data_dir = args.data_dir or get_default_data_dir()
+        # Determine output dir based on data source
+        if args.output_dir:
+            output_dir = args.output_dir
+        elif "balanced" in str(data_dir):
+            output_dir = ARTIFACTS_DIR / "stage1c_balanced"
+        elif "raw" in str(data_dir):
+            output_dir = ARTIFACTS_DIR / "stage1c_raw"
+        elif "augmented" in str(data_dir):
+            output_dir = ARTIFACTS_DIR / "stage1c_augmented"
+        else:
+            output_dir = ARTIFACTS_DIR / "stage1c"
+        
+        return run_training(data_dir, output_dir)
 
 
 if __name__ == "__main__":
