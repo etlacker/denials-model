@@ -80,3 +80,4 @@ data/
 artifacts/
 raw_data/
 catboost_info/
+claims-rules/

@@ -89,6 +89,24 @@ uv run python stage1a_model.py --data-dir artifacts/data_cleaning_augmented
 uv run python stage1a_model.py --data-dir artifacts/data_cleaning_balanced
 ```
 
+### 4. Knowledge Base (denials-only)
+
+```bash
+# Generate flattened knowledge base of denied claims (excludes self-pay)
+uv run python knowledge_base_prep.py
+
+# Custom paths and holdout size
+uv run python knowledge_base_prep.py \
+  --output artifacts/knowledge_base/denied_claims_knowledge_base.csv \
+  --holdout-md artifacts/knowledge_base/denied_claims_holdout.md \
+  --holdout-size 50
+```
+
+Notes:
+- Preserves original denial text fields; no normalization or reconciliation.
+- Excludes self-pay if any of: claims.payment_method, claims.insurance_provider, or patients.insurance_type equals "self-pay"/"self pay" (case-insensitive).
+- Output CSV excludes the random holdout claims; the holdout Markdown contains 50 claims with headers and JSON blocks.
+
 ## Model Performance Comparison
 
 ### Augmented Data (35% denials, 59,639 train claims, 11,895 eval)
